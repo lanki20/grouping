@@ -42,11 +42,25 @@
                     <input type="text" id="absentStudents" placeholder="例如: 3, 12, 15" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all">
                 </div>
 
-                <!-- 每組最多人數設定 -->
+                <!-- 每組基本人數設定 -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-600 mb-1">每組最多人數</label>
-                    <input type="number" id="maxPerGroup" value="4" min="2" max="24" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all">
-                    <p class="text-xs text-gray-400 mt-1">系統將根據可分配總數，自動計算最佳組數與人數</p>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">每組基本人數</label>
+                    <input type="number" id="basePerGroup" value="4" min="2" max="24" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all">
+                </div>
+
+                <!-- 餘數處理方式 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-2">多餘人數分配 (當人數無法整除時)</label>
+                    <div class="flex flex-col gap-2 bg-white p-3 rounded-lg border border-gray-200">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="remainderStrategy" value="distribute" checked class="w-4 h-4 text-green-600 focus:ring-green-500">
+                            <span class="ml-2 text-sm text-gray-700">打散加入其他組 (產生部分人數 <span class="font-bold text-green-700">+1</span> 的組別)</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="remainderStrategy" value="independent" class="w-4 h-4 text-green-600 focus:ring-green-500">
+                            <span class="ml-2 text-sm text-gray-700">獨立成新的一組 (產生一組人數 <span class="font-bold text-red-600">較少</span> 的組別)</span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- 執行按鈕 -->
@@ -113,7 +127,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             // 綁定輸入變更事件，即時更新人數計算
             document.getElementById('absentStudents').addEventListener('input', updateCounts);
-            document.getElementById('maxPerGroup').addEventListener('input', updateCounts);
+            document.getElementById('basePerGroup').addEventListener('input', updateCounts);
+            document.querySelectorAll('input[name="remainderStrategy"]').forEach(radio => {
+                radio.addEventListener('change', updateCounts);
+            });
             
             updateCounts(); // 初始計算
         });
@@ -128,36 +145,53 @@
         }
 
         // 自動計算分組配置
-        function getAutoGroupPlan(totalPeople, maxPerGroup) {
-            if (totalPeople <= 0 || maxPerGroup <= 0) return [];
+        function getAutoGroupPlan(totalPeople, basePerGroup, strategy) {
+            if (totalPeople <= 0 || basePerGroup <= 0) return [];
             
-            const groupCount = Math.ceil(totalPeople / maxPerGroup);
-            if (groupCount === 0) return [];
+            const Q = Math.floor(totalPeople / basePerGroup);
+            const R = totalPeople % basePerGroup;
 
-            const baseSize = Math.floor(totalPeople / groupCount);
-            const largerGroupsCount = totalPeople % groupCount; // 有幾組需要 baseSize + 1
-            
-            const plan = [];
-            for (let i = 0; i < groupCount; i++) {
-                if (i < largerGroupsCount) {
-                    plan.push(baseSize + 1);
+            if (Q === 0) return [totalPeople]; // 人數不足一組，全部擠一組
+
+            if (R === 0) {
+                return Array(Q).fill(basePerGroup);
+            }
+
+            if (strategy === 'independent') {
+                const plan = Array(Q).fill(basePerGroup);
+                plan.push(R);
+                return plan;
+            } else { // 'distribute' 策略
+                if (Q >= R) {
+                    const plan = [];
+                    for (let i = 0; i < R; i++) plan.push(basePerGroup + 1);
+                    for (let i = 0; i < Q - R; i++) plan.push(basePerGroup);
+                    return plan;
                 } else {
-                    plan.push(baseSize);
+                    // 若基本組數不足以打散餘數 (防呆退回平均分配)
+                    const groupCount = Math.ceil(totalPeople / basePerGroup);
+                    const baseSize = Math.floor(totalPeople / groupCount);
+                    const largerGroupsCount = totalPeople % groupCount;
+                    const plan = [];
+                    for (let i = 0; i < groupCount; i++) {
+                        plan.push(i < largerGroupsCount ? baseSize + 1 : baseSize);
+                    }
+                    return plan;
                 }
             }
-            return plan;
         }
 
         function updateCounts() {
             const absentList = getAbsentStudents();
             const available = TOTAL_STUDENTS - absentList.length;
-            let maxPerGroup = parseInt(document.getElementById('maxPerGroup').value, 10);
+            let basePerGroup = parseInt(document.getElementById('basePerGroup').value, 10);
+            const strategy = document.querySelector('input[name="remainderStrategy"]:checked').value;
             
-            if (isNaN(maxPerGroup) || maxPerGroup < 2) maxPerGroup = 4; // 預設防呆
+            if (isNaN(basePerGroup) || basePerGroup < 2) basePerGroup = 4; // 預設防呆
 
             document.getElementById('availableCount').textContent = available;
             
-            const plan = getAutoGroupPlan(available, maxPerGroup);
+            const plan = getAutoGroupPlan(available, basePerGroup, strategy);
             document.getElementById('groupCountDisplay').textContent = `${plan.length}組`;
 
             const statusBox = document.getElementById('statusBox');
@@ -199,10 +233,12 @@
             // 1. 驗證資料
             const absentList = getAbsentStudents();
             const availableCount = TOTAL_STUDENTS - absentList.length;
-            let maxPerGroup = parseInt(document.getElementById('maxPerGroup').value, 10);
-            if (isNaN(maxPerGroup) || maxPerGroup < 2) maxPerGroup = 4;
+            let basePerGroup = parseInt(document.getElementById('basePerGroup').value, 10);
+            const strategy = document.querySelector('input[name="remainderStrategy"]:checked').value;
 
-            const groupSizes = getAutoGroupPlan(availableCount, maxPerGroup);
+            if (isNaN(basePerGroup) || basePerGroup < 2) basePerGroup = 4;
+
+            const groupSizes = getAutoGroupPlan(availableCount, basePerGroup, strategy);
 
             if (groupSizes.length === 0) {
                 alert("請確認人數設定有效。");
@@ -229,17 +265,20 @@
             while (!finalGroups && attempts < MAX_ATTEMPTS) {
                 attempts++;
                 
-                // 每次嘗試先準備好空的組別結構，並加入男女生計數器
-                let tempGroups = groupSizes.map(size => ({
+                // 每次嘗試先準備好空的組別結構，並加入男女生計數器，以及打亂組別的初始順序
+                // 打亂 groupSizes 陣列，確保即使人數相同的組別，順序也不同
+                const shuffledGroupSizes = shuffle([...groupSizes]);
+                
+                let tempGroups = shuffledGroupSizes.map(size => ({
                     targetSize: size,
                     members: [],
                     boysCount: 0,
                     girlsCount: 0
                 }));
 
-                // 複製一份男女學生名單來操作
-                let poolBoys = [...presentBoys];
-                let poolGirls = [...presentGirls];
+                // 複製一份男女學生名單來操作，並先洗牌一次
+                let poolBoys = shuffle([...presentBoys]);
+                let poolGirls = shuffle([...presentGirls]);
                 let isValid = true;
 
                 // 輔助函式：從名單池中移除已分配的學生
@@ -297,6 +336,7 @@
                 if (!isValid) continue;
 
                 // --- 處理剩下的學生 (男女平衡分配) ---
+                // 再洗牌一次確保絕對隨機
                 poolBoys = shuffle(poolBoys);
                 poolGirls = shuffle(poolGirls);
                 
@@ -357,6 +397,8 @@
             }
 
             if (finalGroups) {
+                // 在渲染前，再次打亂組別的順序，確保每次顯示的結果外觀也不同
+                finalGroups = shuffle(finalGroups);
                 renderGroups(finalGroups);
             } else {
                 alert("無法產生符合特定條件的分組，請嘗試調整分組數量（可能需要更多組才能分散特定學生）。");
