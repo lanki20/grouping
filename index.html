@@ -88,7 +88,12 @@
 
         <!-- 分組結果展示區 -->
         <div id="resultsArea" class="hidden border-t-2 border-dashed border-gray-200 pt-8 mt-4">
-            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">🎉 分組結果</h2>
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-4">🎉 分組結果</h2>
+            <!-- 新增男女生顏色圖例 (去性別化顏色) -->
+            <div class="flex justify-center gap-6 mb-6 text-sm font-medium text-gray-600">
+                <span class="flex items-center gap-2"><div class="w-5 h-5 rounded-full bg-green-100 border border-green-300 shadow-sm"></div> 男生</span>
+                <span class="flex items-center gap-2"><div class="w-5 h-5 rounded-full bg-yellow-100 border border-yellow-400 shadow-sm"></div> 女生</span>
+            </div>
             <div id="groupsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <!-- 結果卡片會動態產生在這裡 -->
             </div>
@@ -100,6 +105,9 @@
         // 隱藏條件常數
         const SEPARATED_STUDENTS = [2, 9, 10]; // 2, 9, 10 不可同組
         const VIP_STUDENT = 8; // 8 號要在最大團
+        // 性別名單常數
+        const BOYS_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 24];
+        const GIRLS_LIST = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
 
         // 初始化頁面
         document.addEventListener('DOMContentLoaded', () => {
@@ -201,16 +209,12 @@
                 return;
             }
 
-            // 產生所有可參與的學生名單
-            let allStudents = [];
-            for (let i = 1; i <= TOTAL_STUDENTS; i++) {
-                if (!absentList.includes(i)) {
-                    allStudents.push(i);
-                }
-            }
+            // 產生所有可參與的男女學生名單
+            let presentBoys = BOYS_LIST.filter(id => !absentList.includes(id));
+            let presentGirls = GIRLS_LIST.filter(id => !absentList.includes(id));
+            let allStudents = [...presentBoys, ...presentGirls];
 
             // 檢查是否可以滿足 2,9,10 不相鄰的條件
-            // 如果組數小於在場的這三位學生數量，則無法滿足
             const presentSeparatedStudents = SEPARATED_STUDENTS.filter(s => allStudents.includes(s));
             if (groupSizes.length < presentSeparatedStudents.length) {
                  alert(`分組失敗：產生的組數(${groupSizes.length})太少，無法滿足隱藏的分散條件。請降低每組最多人數。`);
@@ -225,45 +229,52 @@
             while (!finalGroups && attempts < MAX_ATTEMPTS) {
                 attempts++;
                 
-                // 每次嘗試先準備好空的組別結構
+                // 每次嘗試先準備好空的組別結構，並加入男女生計數器
                 let tempGroups = groupSizes.map(size => ({
                     targetSize: size,
-                    members: []
+                    members: [],
+                    boysCount: 0,
+                    girlsCount: 0
                 }));
 
-                // 複製一份學生名單來操作
-                let pool = [...allStudents];
+                // 複製一份男女學生名單來操作
+                let poolBoys = [...presentBoys];
+                let poolGirls = [...presentGirls];
                 let isValid = true;
 
-                // --- 隱藏條件 1: 處理 VIP 學生 (8號) ---
-                if (pool.includes(VIP_STUDENT)) {
-                    // 找出目標人數最多的組別索引
+                // 輔助函式：從名單池中移除已分配的學生
+                const removeFromPool = (id) => {
+                    if (BOYS_LIST.includes(id)) {
+                        poolBoys = poolBoys.filter(s => s !== id);
+                        return 'boy';
+                    } else {
+                        poolGirls = poolGirls.filter(s => s !== id);
+                        return 'girl';
+                    }
+                };
+
+                // --- 隱藏條件 1: 處理 VIP 學生 (8號，男生) ---
+                if (poolBoys.includes(VIP_STUDENT)) {
                     const maxGroupSize = Math.max(...groupSizes);
-                    // 找出所有達到最大人數的組別 (可能有好幾組)
                     const eligibleGroupIndices = [];
                     tempGroups.forEach((g, index) => {
                         if (g.targetSize === maxGroupSize) eligibleGroupIndices.push(index);
                     });
                     
-                    // 隨機選一個最大的組別放入
                     const targetIndex = eligibleGroupIndices[Math.floor(Math.random() * eligibleGroupIndices.length)];
                     tempGroups[targetIndex].members.push(VIP_STUDENT);
-                    
-                    // 從池子中移除
-                    pool = pool.filter(s => s !== VIP_STUDENT);
+                    tempGroups[targetIndex].boysCount++; // 紀錄男生數量 +1
+                    removeFromPool(VIP_STUDENT);
                 }
 
-                // --- 隱藏條件 2: 處理不可同組的學生 (2, 9, 10) ---
-                // 打亂這些特殊學生，避免每次都照順序塞
+                // --- 隱藏條件 2: 處理不可同組的學生 (2, 9, 10，皆為男生) ---
                 let sepStudentsToPlace = shuffle([...presentSeparatedStudents]);
                 
                 for (let s of sepStudentsToPlace) {
-                    // 找出目前還沒有被放入任何特殊學生，且還有空位的組別
                     let validGroupIndices = [];
                     for (let i = 0; i < tempGroups.length; i++) {
                         const group = tempGroups[i];
                         if (group.members.length < group.targetSize) {
-                            // 檢查這組是否已經有其他特殊學生
                             const hasOtherSepStudent = group.members.some(member => SEPARATED_STUDENTS.includes(member));
                             if (!hasOtherSepStudent) {
                                 validGroupIndices.push(i);
@@ -272,40 +283,71 @@
                     }
 
                     if (validGroupIndices.length > 0) {
-                        // 隨機選一個可用的組放入
                         const targetIndex = validGroupIndices[Math.floor(Math.random() * validGroupIndices.length)];
                         tempGroups[targetIndex].members.push(s);
-                        pool = pool.filter(id => id !== s); // 從池子移除
+                        let gender = removeFromPool(s);
+                        if (gender === 'boy') tempGroups[targetIndex].boysCount++;
+                        else tempGroups[targetIndex].girlsCount++;
                     } else {
-                        // 如果找不到可用的組，代表這次分配失敗，需要重來
                         isValid = false;
                         break;
                     }
                 }
 
-                if (!isValid) continue; // 進入下一次 while 迴圈嘗試
+                if (!isValid) continue;
 
-                // --- 處理剩下的學生 ---
-                pool = shuffle(pool); // 打亂剩下的學生
+                // --- 處理剩下的學生 (男女平衡分配) ---
+                poolBoys = shuffle(poolBoys);
+                poolGirls = shuffle(poolGirls);
                 
-                for (let s of pool) {
-                    // 找出還有空位的組別
-                    let emptyGroupIndices = [];
-                    for (let i = 0; i < tempGroups.length; i++) {
-                        if (tempGroups[i].members.length < tempGroups[i].targetSize) {
-                            emptyGroupIndices.push(i);
-                        }
-                    }
+                // 採用輪流(Round-Robin)的方式把學生放入未滿的組別，以平衡各組的男女比例
+                let madeProgress = true;
+                while (madeProgress) {
+                    madeProgress = false;
+                    
+                    // 隨機打亂組別填寫順序，避免總是第一組先被填滿
+                    let groupIndices = shuffle(tempGroups.map((_, i) => i));
+                    
+                    for (let i of groupIndices) {
+                        let group = tempGroups[i];
+                        if (group.members.length < group.targetSize) {
+                            
+                            // 決定這一個空位要優先挑男生還是女生，維持比例平衡
+                            let preferBoy = false;
+                            if (group.boysCount < group.girlsCount) {
+                                preferBoy = true; // 女生比較多，補男生
+                            } else if (group.girlsCount < group.boysCount) {
+                                preferBoy = false; // 男生比較多，補女生
+                            } else {
+                                // 數量相等時，優先挑選「剩下還沒分組的人數較多」的性別
+                                preferBoy = poolBoys.length > poolGirls.length;
+                                // 若剩下的人數也相等，則隨機挑選
+                                if (poolBoys.length === poolGirls.length && poolBoys.length > 0) {
+                                    preferBoy = Math.random() > 0.5;
+                                }
+                            }
 
-                    if (emptyGroupIndices.length > 0) {
-                        // 隨機放入一個有空位的組
-                        const targetIndex = emptyGroupIndices[Math.floor(Math.random() * emptyGroupIndices.length)];
-                        tempGroups[targetIndex].members.push(s);
-                    } else {
-                        // 理論上不會發生，因為前面已經驗證過總人數
-                        console.error("分配錯誤：找不到空位！");
-                        isValid = false;
-                        break;
+                            // 從對應的性別池中取出學生
+                            let selectedId = null;
+                            if (preferBoy && poolBoys.length > 0) {
+                                selectedId = poolBoys.pop();
+                                group.boysCount++;
+                            } else if (!preferBoy && poolGirls.length > 0) {
+                                selectedId = poolGirls.pop();
+                                group.girlsCount++;
+                            } else if (poolBoys.length > 0) {
+                                selectedId = poolBoys.pop(); // 備用方案
+                                group.boysCount++;
+                            } else if (poolGirls.length > 0) {
+                                selectedId = poolGirls.pop(); // 備用方案
+                                group.girlsCount++;
+                            }
+
+                            if (selectedId !== null) {
+                                group.members.push(selectedId);
+                                madeProgress = true;
+                            }
+                        }
                     }
                 }
 
@@ -363,8 +405,14 @@
                 
                 sortedMembers.forEach(memberId => {
                     const pill = document.createElement('span');
-                    // 一般學生樣式
-                    pill.className = 'w-10 h-10 flex items-center justify-center bg-white rounded-full font-bold shadow-sm border border-current opacity-90';
+                    
+                    // 根據男女生給予不同的外觀顏色 (去性別化：男生綠、女生黃)
+                    const isBoy = BOYS_LIST.includes(memberId);
+                    const genderColor = isBoy 
+                        ? 'text-green-700 bg-green-100 border-green-300' 
+                        : 'text-yellow-700 bg-yellow-100 border-yellow-400';
+                        
+                    pill.className = `w-10 h-10 flex items-center justify-center rounded-full font-bold shadow-sm border ${genderColor} opacity-90`;
                     pill.textContent = memberId;
 
                     memberList.appendChild(pill);
