@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>504抽籤分組系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdf4; /* 淺綠色背景，適合教育環境 */
+        }
+        .group-card {
+            transition: transform 0.2s ease-in-out;
+        }
+        .group-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="max-w-4xl w-full bg-white rounded-2xl shadow-xl p-8 border-t-8 border-green-500">
+        <h1 class="text-3xl font-bold text-center text-green-700 mb-8">🎯 504抽籤分組系統</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- 左側設定區 -->
+            <div class="space-y-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">⚙️ 分組設定</h2>
+                
+                <!-- 總人數設定 (固定為24) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">班級總人數</label>
+                    <input type="number" id="totalStudents" value="24" disabled class="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed">
+                    <p class="text-xs text-gray-400 mt-1">目前設定為固定 24 人</p>
+                </div>
+
+                <!-- 請假名單 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">排除請假號碼 (請用逗號分隔)</label>
+                    <input type="text" id="absentStudents" placeholder="例如: 3, 12, 15" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all">
+                </div>
+
+                <!-- 每組最多人數設定 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">每組最多人數</label>
+                    <input type="number" id="maxPerGroup" value="4" min="2" max="24" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all">
+                    <p class="text-xs text-gray-400 mt-1">系統將根據可分配總數，自動計算最佳組數與人數</p>
+                </div>
+
+                <!-- 執行按鈕 -->
+                <button onclick="generateGroups()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-colors transform active:scale-95 flex justify-center items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                    開始分組
+                </button>
+            </div>
+
+            <!-- 右側結果與統計區 -->
+            <div class="flex flex-col h-full">
+                <div class="bg-blue-50 p-6 rounded-xl border border-blue-100 flex-grow">
+                    <h2 class="text-xl font-semibold text-blue-800 border-b border-blue-200 pb-2 mb-4">📊 目前狀態</h2>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 text-center">
+                            <p class="text-sm text-gray-500 mb-1">可分配總人數</p>
+                            <p id="availableCount" class="text-3xl font-bold text-blue-600">24</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 text-center">
+                            <p class="text-sm text-gray-500 mb-1">預計分成</p>
+                            <p id="groupCountDisplay" class="text-3xl font-bold text-indigo-600">6組</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-green-50 p-4 rounded-lg border border-green-200" id="statusBox">
+                        <p class="text-sm flex items-start gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            <span id="autoPlanText" class="font-medium text-green-800">將自動分為：4人組 × 6</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分組結果展示區 -->
+        <div id="resultsArea" class="hidden border-t-2 border-dashed border-gray-200 pt-8 mt-4">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">🎉 分組結果</h2>
+            <div id="groupsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- 結果卡片會動態產生在這裡 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOTAL_STUDENTS = 24;
+        // 隱藏條件常數
+        const SEPARATED_STUDENTS = [2, 9, 10]; // 2, 9, 10 不可同組
+        const VIP_STUDENT = 8; // 8 號要在最大團
+
+        // 初始化頁面
+        document.addEventListener('DOMContentLoaded', () => {
+            // 綁定輸入變更事件，即時更新人數計算
+            document.getElementById('absentStudents').addEventListener('input', updateCounts);
+            document.getElementById('maxPerGroup').addEventListener('input', updateCounts);
+            
+            updateCounts(); // 初始計算
+        });
+
+        function getAbsentStudents() {
+            const input = document.getElementById('absentStudents').value;
+            if (!input.trim()) return [];
+            
+            return input.split(',')
+                .map(n => parseInt(n.trim(), 10))
+                .filter(n => !isNaN(n) && n >= 1 && n <= TOTAL_STUDENTS);
+        }
+
+        // 自動計算分組配置
+        function getAutoGroupPlan(totalPeople, maxPerGroup) {
+            if (totalPeople <= 0 || maxPerGroup <= 0) return [];
+            
+            const groupCount = Math.ceil(totalPeople / maxPerGroup);
+            if (groupCount === 0) return [];
+
+            const baseSize = Math.floor(totalPeople / groupCount);
+            const largerGroupsCount = totalPeople % groupCount; // 有幾組需要 baseSize + 1
+            
+            const plan = [];
+            for (let i = 0; i < groupCount; i++) {
+                if (i < largerGroupsCount) {
+                    plan.push(baseSize + 1);
+                } else {
+                    plan.push(baseSize);
+                }
+            }
+            return plan;
+        }
+
+        function updateCounts() {
+            const absentList = getAbsentStudents();
+            const available = TOTAL_STUDENTS - absentList.length;
+            let maxPerGroup = parseInt(document.getElementById('maxPerGroup').value, 10);
+            
+            if (isNaN(maxPerGroup) || maxPerGroup < 2) maxPerGroup = 4; // 預設防呆
+
+            document.getElementById('availableCount').textContent = available;
+            
+            const plan = getAutoGroupPlan(available, maxPerGroup);
+            document.getElementById('groupCountDisplay').textContent = `${plan.length}組`;
+
+            const statusBox = document.getElementById('statusBox');
+            const autoPlanText = document.getElementById('autoPlanText');
+
+            if (plan.length === 0) {
+                autoPlanText.textContent = "請輸入有效的人數。";
+                statusBox.className = "bg-red-50 p-4 rounded-lg border border-red-200 text-red-800";
+                return;
+            }
+
+            // 統計各人數的組數
+            const counts = {};
+            plan.forEach(size => {
+                counts[size] = (counts[size] || 0) + 1;
+            });
+
+            let planStrings = [];
+            for (const [size, count] of Object.entries(counts).sort((a,b) => b[0] - a[0])) {
+                planStrings.push(`${size}人組 × ${count}`);
+            }
+            
+            autoPlanText.textContent = `將自動分配：${planStrings.join('，')}`;
+            statusBox.className = "bg-green-50 p-4 rounded-lg border border-green-200 text-green-800";
+        }
+
+        // Fisher-Yates 洗牌演算法
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        function generateGroups() {
+            // 1. 驗證資料
+            const absentList = getAbsentStudents();
+            const availableCount = TOTAL_STUDENTS - absentList.length;
+            let maxPerGroup = parseInt(document.getElementById('maxPerGroup').value, 10);
+            if (isNaN(maxPerGroup) || maxPerGroup < 2) maxPerGroup = 4;
+
+            const groupSizes = getAutoGroupPlan(availableCount, maxPerGroup);
+
+            if (groupSizes.length === 0) {
+                alert("請確認人數設定有效。");
+                return;
+            }
+
+            // 產生所有可參與的學生名單
+            let allStudents = [];
+            for (let i = 1; i <= TOTAL_STUDENTS; i++) {
+                if (!absentList.includes(i)) {
+                    allStudents.push(i);
+                }
+            }
+
+            // 檢查是否可以滿足 2,9,10 不相鄰的條件
+            // 如果組數小於在場的這三位學生數量，則無法滿足
+            const presentSeparatedStudents = SEPARATED_STUDENTS.filter(s => allStudents.includes(s));
+            if (groupSizes.length < presentSeparatedStudents.length) {
+                 alert(`分組失敗：產生的組數(${groupSizes.length})太少，無法滿足隱藏的分散條件。請降低每組最多人數。`);
+                 return;
+            }
+
+            // 開始嘗試分組 (因為有條件限制，可能會失敗，所以用迴圈多試幾次)
+            let finalGroups = null;
+            let attempts = 0;
+            const MAX_ATTEMPTS = 1000;
+
+            while (!finalGroups && attempts < MAX_ATTEMPTS) {
+                attempts++;
+                
+                // 每次嘗試先準備好空的組別結構
+                let tempGroups = groupSizes.map(size => ({
+                    targetSize: size,
+                    members: []
+                }));
+
+                // 複製一份學生名單來操作
+                let pool = [...allStudents];
+                let isValid = true;
+
+                // --- 隱藏條件 1: 處理 VIP 學生 (8號) ---
+                if (pool.includes(VIP_STUDENT)) {
+                    // 找出目標人數最多的組別索引
+                    const maxGroupSize = Math.max(...groupSizes);
+                    // 找出所有達到最大人數的組別 (可能有好幾組)
+                    const eligibleGroupIndices = [];
+                    tempGroups.forEach((g, index) => {
+                        if (g.targetSize === maxGroupSize) eligibleGroupIndices.push(index);
+                    });
+                    
+                    // 隨機選一個最大的組別放入
+                    const targetIndex = eligibleGroupIndices[Math.floor(Math.random() * eligibleGroupIndices.length)];
+                    tempGroups[targetIndex].members.push(VIP_STUDENT);
+                    
+                    // 從池子中移除
+                    pool = pool.filter(s => s !== VIP_STUDENT);
+                }
+
+                // --- 隱藏條件 2: 處理不可同組的學生 (2, 9, 10) ---
+                // 打亂這些特殊學生，避免每次都照順序塞
+                let sepStudentsToPlace = shuffle([...presentSeparatedStudents]);
+                
+                for (let s of sepStudentsToPlace) {
+                    // 找出目前還沒有被放入任何特殊學生，且還有空位的組別
+                    let validGroupIndices = [];
+                    for (let i = 0; i < tempGroups.length; i++) {
+                        const group = tempGroups[i];
+                        if (group.members.length < group.targetSize) {
+                            // 檢查這組是否已經有其他特殊學生
+                            const hasOtherSepStudent = group.members.some(member => SEPARATED_STUDENTS.includes(member));
+                            if (!hasOtherSepStudent) {
+                                validGroupIndices.push(i);
+                            }
+                        }
+                    }
+
+                    if (validGroupIndices.length > 0) {
+                        // 隨機選一個可用的組放入
+                        const targetIndex = validGroupIndices[Math.floor(Math.random() * validGroupIndices.length)];
+                        tempGroups[targetIndex].members.push(s);
+                        pool = pool.filter(id => id !== s); // 從池子移除
+                    } else {
+                        // 如果找不到可用的組，代表這次分配失敗，需要重來
+                        isValid = false;
+                        break;
+                    }
+                }
+
+                if (!isValid) continue; // 進入下一次 while 迴圈嘗試
+
+                // --- 處理剩下的學生 ---
+                pool = shuffle(pool); // 打亂剩下的學生
+                
+                for (let s of pool) {
+                    // 找出還有空位的組別
+                    let emptyGroupIndices = [];
+                    for (let i = 0; i < tempGroups.length; i++) {
+                        if (tempGroups[i].members.length < tempGroups[i].targetSize) {
+                            emptyGroupIndices.push(i);
+                        }
+                    }
+
+                    if (emptyGroupIndices.length > 0) {
+                        // 隨機放入一個有空位的組
+                        const targetIndex = emptyGroupIndices[Math.floor(Math.random() * emptyGroupIndices.length)];
+                        tempGroups[targetIndex].members.push(s);
+                    } else {
+                        // 理論上不會發生，因為前面已經驗證過總人數
+                        console.error("分配錯誤：找不到空位！");
+                        isValid = false;
+                        break;
+                    }
+                }
+
+                if (isValid) {
+                    finalGroups = tempGroups;
+                }
+            }
+
+            if (finalGroups) {
+                renderGroups(finalGroups);
+            } else {
+                alert("無法產生符合特定條件的分組，請嘗試調整分組數量（可能需要更多組才能分散特定學生）。");
+            }
+        }
+
+        function renderGroups(groups) {
+            const container = document.getElementById('groupsContainer');
+            container.innerHTML = ''; // 清空先前結果
+            
+            // 顯示結果區塊
+            document.getElementById('resultsArea').classList.remove('hidden');
+
+            // 產生隨機顏色供卡片使用
+            const colors = [
+                'bg-red-50 border-red-200 text-red-800',
+                'bg-blue-50 border-blue-200 text-blue-800',
+                'bg-green-50 border-green-200 text-green-800',
+                'bg-purple-50 border-purple-200 text-purple-800',
+                'bg-yellow-50 border-yellow-200 text-yellow-800',
+                'bg-pink-50 border-pink-200 text-pink-800',
+                'bg-indigo-50 border-indigo-200 text-indigo-800',
+                'bg-teal-50 border-teal-200 text-teal-800'
+            ];
+
+            groups.forEach((group, index) => {
+                // 將組員座號由小到大排序，方便閱讀
+                const sortedMembers = group.members.sort((a, b) => a - b);
+                
+                const colorClass = colors[index % colors.length];
+                
+                const card = document.createElement('div');
+                card.className = `group-card p-6 rounded-xl border-2 ${colorClass} shadow-sm`;
+                
+                // 標題
+                const title = document.createElement('h3');
+                title.className = 'text-xl font-bold mb-4 flex justify-between items-center border-b pb-2';
+                title.innerHTML = `
+                    <span>第 ${index + 1} 組</span>
+                    <span class="text-sm font-medium opacity-75">${group.targetSize} 人</span>
+                `;
+                
+                // 成員列表
+                const memberList = document.createElement('div');
+                memberList.className = 'flex flex-wrap gap-2';
+                
+                sortedMembers.forEach(memberId => {
+                    const pill = document.createElement('span');
+                    // 一般學生樣式
+                    pill.className = 'w-10 h-10 flex items-center justify-center bg-white rounded-full font-bold shadow-sm border border-current opacity-90';
+                    pill.textContent = memberId;
+
+                    memberList.appendChild(pill);
+                });
+                
+                card.appendChild(title);
+                card.appendChild(memberList);
+                container.appendChild(card);
+            });
+            
+            // 滾動到結果區域
+            document.getElementById('resultsArea').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
